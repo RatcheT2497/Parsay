@@ -41,7 +41,7 @@ function __psl_token_is_real(token)
 			if (decimal)
 				return false;
 			decimal = true;
-		} else if ( __ce_char_is_digit(c) )
+		} else if ( __psl_char_is_digit(c) )
 		{
 			if ( decimal )
 				afterdecimal++;
