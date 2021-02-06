@@ -58,12 +58,12 @@ function Parsley(write_name, write_func) constructor
 {
 	tokens = ds_map_create();
 	tokens[? write_name] = write_func;
-	self.__write_func = write_func;
+	__write_func = write_func;
 	
-	self.custom_validate_list = undefined; // function custom_validate_list(list, level) : undefined ( throw for error )
-	self.custom_evaluate_token = undefined;  // function custom_evaluate_token(token) : any
-	self.custom_override_token = undefined; // function custom_override_token(token) : any/undefined
-	self.custom_parse_token = undefined; // function custom_parse_token(str, index, start_character) : { data: any, new_index: real }
+	custom_validate_list = undefined; // function custom_validate_list(list, level) : undefined ( throw for error )
+	custom_evaluate_token = undefined;  // function custom_evaluate_token(token) : any
+	custom_override_token = undefined; // function custom_override_token(token) : any/undefined
+	custom_parse_token = undefined; // function custom_parse_token(str, index, start_character) : { data: any, new_index: real }
 	/* INTERNAL FUNCTIONS */
 	__evaluate_token = function(token)
 	{
@@ -71,7 +71,7 @@ function Parsley(write_name, write_func) constructor
 		{
 			var ceto_type = typeof(self.custom_override_token);
 			if ( PARSLEY_DEBUG_ERROR_CHECKING && ceto_type != "function" && ceto_type != "method" )
-				__psl_error(0, "Expected a function in 'evaluate_token_override', got ", ceto_type);
+				__psl_error(0, "Expected a function in 'custom_override_token', got ", ceto_type);
 			// Override any and all token avaluations, even numbers
 			var t = self.custom_override_token(token);
 			if ( !is_undefined(t) )
@@ -96,7 +96,7 @@ function Parsley(write_name, write_func) constructor
 			{
 				var cet_type = typeof(self.custom_evaluate_token);
 				if ( PARSLEY_DEBUG_ERROR_CHECKING && cet_type != "function" && cet_type != "method" )
-					__psl_error(2, "Expected a function in 'evaluate_token', got '", cet_type, "'");
+					__psl_error(2, "Expected a function in 'custom_evaluate_token', got '", cet_type, "'");
 
 				var t = self.custom_evaluate_token(token);
 				if ( !is_undefined(t) )
