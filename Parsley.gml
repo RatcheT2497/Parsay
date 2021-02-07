@@ -60,23 +60,31 @@ function Parsley(write_name, write_func) constructor
 	tokens[? write_name] = write_func;
 	__write_func = write_func;
 	
-	custom_validate_list = undefined; // function custom_validate_list(list, level) : undefined ( throw for error )
-	custom_evaluate_token = undefined;  // function custom_evaluate_token(token) : any
-	custom_override_token = undefined; // function custom_override_token(token) : any/undefined
-	custom_parse_token = undefined; // function custom_parse_token(str, index, start_character) : { data: any, new_index: real }
+	default_postprocess_list = function(list, level) { 
+		if ( level == 0 )
+		{
+			if ( PARSLEY_DEBUG_ERROR_CHECKING && array_length(list) == 0 )
+				throw "Can not have zero-length list at top level.";	
+			
+			var token0_type = typeof(list[0]);
+			if ( PARSLEY_DEBUG_ERROR_CHECKING && token0_type != "function" && token0_type != "method" )
+				throw "Expected function as the first token of top-level list, got '" + token0_type + "'.";
+		}
+		return list; 
+	}; // function user_postprocess_list(list, level) : array ( throw for error )
+	user_postprocess_list = default_postprocess_list;
+	
+	user_evaluate_token = function(token) {};  // function user_evaluate_token(token) : any
+	user_override_token = function(token) {}; // function user_override_token(token) : any/undefined
+	user_parse_token = function(str, index, start_character) {}; // function user_parse_token(str, index, start_character) : { data: any, new_index: real }
 	/* INTERNAL FUNCTIONS */
 	__evaluate_token = function(token)
 	{
-		if ( !is_undefined(self.custom_override_token) )
-		{
-			var ceto_type = typeof(self.custom_override_token);
-			if ( PARSLEY_DEBUG_ERROR_CHECKING && ceto_type != "function" && ceto_type != "method" )
-				__psl_error(0, "Expected a function in 'custom_override_token', got ", ceto_type);
-			// Override any and all token avaluations, even numbers
-			var t = self.custom_override_token(token);
-			if ( !is_undefined(t) )
-				return t;
-		}
+		// Override any and all token avaluations, even numbers
+		var t = self.user_override_token(token);
+		if ( !is_undefined(t) )
+			return t;
+
 		var c = string_char_at(token, 1);
 		if ( __psl_char_is_digit(c) || c == "-" || c == "." )
 		{
@@ -92,13 +100,9 @@ function Parsley(write_name, write_func) constructor
 			if ( ds_map_exists(self.tokens, token) )
 			{
 				return self.tokens[? token];
-			} else if ( !is_undefined(self.custom_evaluate_token) )
+			} else
 			{
-				var cet_type = typeof(self.custom_evaluate_token);
-				if ( PARSLEY_DEBUG_ERROR_CHECKING && cet_type != "function" && cet_type != "method" )
-					__psl_error(2, "Expected a function in 'custom_evaluate_token', got '", cet_type, "'");
-
-				var t = self.custom_evaluate_token(token);
+				var t = self.user_evaluate_token(token);
 				if ( !is_undefined(t) )
 					return t;
 			}
@@ -125,20 +129,17 @@ function Parsley(write_name, write_func) constructor
 				i++;
 			} else if ( c == PARSLEY_CHAR_LIST_BEGIN ) { // Recursively parse list
 				var expr = self.__read_expression(str, length, i, level + 1);
-				if ( !is_undefined(self.custom_validate_list) )
+				var finished_list = expr.data;
+
+				try {
+					var res = self.user_postprocess_list(expr.data, level + 1);
+					if ( !is_undefined(res) )
+						finished_list = res;
+				} catch (e)
 				{
-					var clv_type = typeof(self.custom_validate_list);
-					if ( PARSLEY_DEBUG_ERROR_CHECKING && clv_type != "function" && clv_type != "method" )
-						__psl_error(-1, "Expected a function in 'custom_validate_list', got '", clv_type, "'.");
-					
-					try {
-						self.custom_validate_list(expr.data, level + 1);
-					} catch (e)
-					{
-						__psl_error(-1, "Invalid list: ", e);
-					}
-						
-				} 
+					__psl_error(-1, "Invalid list: ", e);
+				}
+
 				// Have index end up on the character right after the closing bracket
 				i = expr.end_index;
 				
@@ -146,7 +147,7 @@ function Parsley(write_name, write_func) constructor
 				if ( PARSLEY_DEBUG_ERROR_CHECKING && !(__psl_char_is_space(c) || (c == PARSLEY_CHAR_LIST_END)) )
 					__psl_error(4, "Expected whitespace or another '", PARSLEY_CHAR_LIST_BEGIN, "' after '", PARSLEY_CHAR_LIST_END, "', found '", c, "' instead.");
 				
-				ds_list_add(list, expr.data);
+				ds_list_add(list, finished_list);
 			} else if ( c == PARSLEY_CHAR_LIST_END) { // End list parsing, go up one level
 				// Flush token buffer if not empty before returning the parsed list
 				if ( buffer != "" )
@@ -189,15 +190,12 @@ function Parsley(write_name, write_func) constructor
 				ds_list_add(list, buffer);
 				buffer = "";
 			} else {
-				if ( !is_undefined(self.custom_parse_token) )
+				var t = self.user_parse_token(str, i, c);
+				if ( !is_undefined(t) )
 				{
-					var t = self.custom_parse_token(str, i, c);
-					if ( !is_undefined(t) )
-					{
-						ds_list_add(list, t.data);
-						i = t.new_index;
-						continue;
-					}
+					ds_list_add(list, t.data);
+					i = t.new_index;
+					continue;
 				}
 
 				// Add character to buffer
@@ -256,27 +254,23 @@ function Parsley(write_name, write_func) constructor
 				}
 				
 				var cmd = self.__read_expression(str, length, i, 0);
+				var finished_list = cmd.data;
 				i = cmd.end_index;
 				if ( PARSLEY_DEBUG_ERROR_CHECKING && array_length(cmd.data) == 0 )
 				{
 					__psl_error(9, "Empty top-level list is invalid.");
 				}
-				if ( !is_undefined(self.custom_validate_list) )
+
+				try {
+					var t = self.user_postprocess_list(cmd.data, 0);
+					if ( !is_undefined(t) )
+						finished_list = t;
+				} catch (e)
 				{
-					try {
-						self.custom_validate_list(cmd.data, 0);
-					} catch (e)
-					{
-						__psl_error(-1, "Invalid list: ", e);
-					}
-				} else {
-					var token0_type = typeof(cmd.data[0]);
-					if ( PARSLEY_DEBUG_ERROR_CHECKING && token0_type != "function" && token0_type != "method" )
-					{
-						__psl_error(10, "Expected function as the first token of top-level list, got '", token0_type, "'.");
-					}
+					__psl_error(-1, "Invalid list: ", e);
 				}
-				ds_list_add(list, cmd.data);
+
+				ds_list_add(list, finished_list);
 			} else {
 				if ( c == "\\" )
 				{

@@ -24,7 +24,7 @@ It supports user-definable tokens, which can hold any value. Anything that doesn
 
 As for the 'extensibility', in addition to these tokens, you can define four functions in the Parsley object:
 
--  `function custom_validate_list(list, level) : undefined ( throw for error )` - A replacement for the fairly basic built-in validation. By default the parser will check if the top level list's first token is a function, and throws an error. This function gets called after every single list gets parsed, instead of just the top-level one.
+-  `function custom_postprocess_list(list, level) : undefined ( throw for error )` - A replacement for the fairly basic built-in validation. By default the parser will check if the top level list's first token is a function, and throws an error. This function gets called after every single list gets parsed, instead of just the top-level one.
 - `function custom_evaluate_token(token) : any` - happens after token evaluation, only works on already-identified tokens and those which aren't defined in the token map.
 - `function custom_override_token(token) : any/undefined` - happens before token evaluation and before the above rule matching. If it returns undefined, token evaluation takes place as normal. Otherwise, token evaluation is skipped in favour of using this function's return value.
 - `function custom_parse_token(str, index, start_character) : { data: any, new_index: real }`
