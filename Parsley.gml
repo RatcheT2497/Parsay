@@ -5,24 +5,7 @@
 #macro PARSLEY_CHAR_STRING_2 "`"
 
 function __psl_char_is_digit(c) { return (ord(c) >= ord("0") && ord(c) <= ord("9")) }
-function __psl_char_is_space(c) { return c == " " || c == "\t" || c == "\v" || c == "\f" || c == "\n" || c == "\r"; }
-function __psl_ds_list_to_array(list)
-{
-	var size = ds_list_size(list);
-	var tmp = array_create(size);
-	for (var i = 0; i < size; i++)
-		tmp[i] = list[| i];
-	return tmp;
-}
-function __psl_error(type)
-{
-	var msg = "Parsley Error " + string(type) + "; ";
-	for ( var i = 1; i < argument_count; i++ )
-	{
-		msg += string(argument[i]);
-	}
-	show_error(msg, true);
-}
+function __psl_char_is_whitespace(c) { return c == " " || c == "\t" || c == "\v" || c == "\f" || c == "\n" || c == "\r"; }
 function __psl_token_is_real(token)
 {
 	var negative = false;
@@ -54,10 +37,39 @@ function __psl_token_is_real(token)
 
 	return true;
 }
+function __psl_ds_list_to_array(list)
+{
+	var size = ds_list_size(list);
+	var tmp = array_create(size);
+	for (var i = 0; i < size; i++)
+		tmp[i] = list[| i];
+	return tmp;
+}
+function __psl_error(type)
+{
+	var msg = "Parsley Error " + string(type) + "; ";
+	for ( var i = 1; i < argument_count; i++ )
+	{
+		msg += string(argument[i]);
+	}
+	show_error(msg, true);
+}
+
+enum PARSLEY_ERROR
+{
+	TOKEN_REPLACE_INVALID,
+	TOKEN_MAP_INVALID,
+	LIST_POSTPROCESSING_ERROR,
+	TOKEN_NUMBER_INVALID,
+	LIST_INVALID,
+	UNHANDLED_TOKEN,
+	UNEXPECTED_CHARACTER
+}
 function Parsley(write_name, write_func) constructor
 {
 	tokens = ds_map_create();
 	tokens[? write_name] = write_func;
+	
 	__write_func = write_func;
 	
 	default_postprocess_list = function(list, level) { 
@@ -71,12 +83,13 @@ function Parsley(write_name, write_func) constructor
 				throw "Expected function as the first token of top-level list, got '" + token0_type + "'.";
 		}
 		return list; 
-	}; // function user_postprocess_list(list, level) : array ( throw for error )
-	user_postprocess_list = default_postprocess_list;
+	}; 
 	
-	user_evaluate_token = function(token) {};  // function user_evaluate_token(token) : any
-	user_override_token = function(token) {}; // function user_override_token(token) : any/undefined
-	user_parse_token = function(str, index, buffer) {}; // function user_parse_token(str, index, buffer) : { data: any, new_index: real }
+	user_postprocess_list = default_postprocess_list;
+	user_evaluate_token = function(token) {};
+	user_override_token = function(token) {};
+	user_parse_token = function(str, index, buffer) {};
+	
 	/* INTERNAL FUNCTIONS */
 	__evaluate_token = function(token)
 	{
@@ -86,15 +99,12 @@ function Parsley(write_name, write_func) constructor
 			return t;
 
 		var c = string_char_at(token, 1);
-		if ( __psl_char_is_digit(c) || c == "-" || c == "." )
+		if ( __psl_char_is_digit(c) || c == "-" || c == "." && (token != "-") )
 		{
-			if ( string_length(token) == 1 ) // hack for single "-" token to work
-				return token;
-
 			if ( __psl_token_is_real(token) )
 				return real(token);
 
-			__psl_error(1, "Invalid number token '", token, "'.");
+			__psl_error(PARSLEY_ERROR.TOKEN_NUMBER_INVALID, "Invalid number token '", token, "'.");
 		} else {
 			// Custom token evaluation
 			if ( ds_map_exists(self.tokens, token) )
@@ -107,7 +117,7 @@ function Parsley(write_name, write_func) constructor
 					return t;
 			}
 		}
-		__psl_error(0, "Unhandled token '", token, "'.");
+		__psl_error(PARSLEY_ERROR.UNHANDLED_TOKEN, "Unhandled token '", token, "'.");
 	}
 	__read_expression = function(str, length, index, level)
 	{
@@ -117,7 +127,7 @@ function Parsley(write_name, write_func) constructor
 		while ( i <= length )
 		{
 			var c = string_char_at(str, i);
-			if ( __psl_char_is_space(c) ) // Whitespace
+			if ( __psl_char_is_whitespace(c) ) // Whitespace
 			{
 				// Flush token buffer if not empty
 				if ( buffer != "" )
@@ -137,15 +147,15 @@ function Parsley(write_name, write_func) constructor
 						finished_list = res;
 				} catch (e)
 				{
-					__psl_error(1, "Invalid list: ", e);
+					__psl_error(PARSLEY_ERROR.LIST_POSTPROCESSING_ERROR, "List postprocessing error: ", e);
 				}
 
 				// Have index end up on the character right after the closing bracket
 				i = expr.end_index;
 				
 				c = string_char_at(str, i);
-				if ( PARSLEY_DEBUG_ERROR_CHECKING && !(__psl_char_is_space(c) || (c == PARSLEY_CHAR_LIST_END)) )
-					__psl_error(2, "Expected whitespace or another '", PARSLEY_CHAR_LIST_BEGIN, "' after '", PARSLEY_CHAR_LIST_END, "', found '", c, "' instead.");
+				if ( PARSLEY_DEBUG_ERROR_CHECKING && !(__psl_char_is_whitespace(c) || (c == PARSLEY_CHAR_LIST_END)) )
+					__psl_error(PARSLEY_ERROR.UNEXPECTED_CHARACTER, "Expected whitespace or another '", PARSLEY_CHAR_LIST_BEGIN, "' after '", PARSLEY_CHAR_LIST_END, "', found '", c, "' instead.");
 				
 				ds_list_add(list, finished_list);
 			} else if ( c == PARSLEY_CHAR_LIST_END) { // End list parsing, go up one level
@@ -183,8 +193,8 @@ function Parsley(write_name, write_func) constructor
 				
 				// End parsing on space character
 				c = string_char_at(str, ++i);
-				if ( PARSLEY_DEBUG_ERROR_CHECKING && !( __psl_char_is_space(c) || (c == PARSLEY_CHAR_LIST_END) ))
-					__psl_error(3, "Expected whitespace or '", PARSLEY_CHAR_LIST_END, "' after end of string '", buffer, "', found '", c, "' instead.");
+				if ( PARSLEY_DEBUG_ERROR_CHECKING && !( __psl_char_is_whitespace(c) || (c == PARSLEY_CHAR_LIST_END) ))
+					__psl_error(PARSLEY_ERROR.UNEXPECTED_CHARACTER, "Expected whitespace or '", PARSLEY_CHAR_LIST_END, "' after end of string '", buffer, "', found '", c, "' instead.");
 
 				// Add string to list and clear buffer
 				ds_list_add(list, buffer);
@@ -202,7 +212,7 @@ function Parsley(write_name, write_func) constructor
 				}
 			}
 		}
-		__psl_error(4, "Could not find '", PARSLEY_CHAR_LIST_END , "' to end list at level ", level, ".");
+		__psl_error(PARSLEY_ERROR.UNEXPECTED_CHARACTER, "Could not find '", PARSLEY_CHAR_LIST_END , "' to end list at level ", level, ".");
 	}
 	
 	/* API */
@@ -212,7 +222,7 @@ function Parsley(write_name, write_func) constructor
 	add_token = function(name, value)
 	{
 		if ( PARSLEY_DEBUG_ERROR_CHECKING && ds_map_exists(self.tokens, name) )
-			__psl_error(5, "Can not replace token '", name, "'.");
+			__psl_error(PARSLEY_ERROR.TOKEN_REPLACE_INVALID, "Can't replace token '", name, "'.");
 		self.tokens[? name] = value;
 	}
 	
@@ -221,7 +231,7 @@ function Parsley(write_name, write_func) constructor
 	add_tokens_from_map = function(map)
 	{
 		if ( PARSLEY_DEBUG_ERROR_CHECKING && !ds_exists(map, ds_type_map) )
-			__psl_error(6, "Can not add tokens from non-existent map.");
+			__psl_error(PARSLEY_ERROR.TOKEN_MAP_INVALID, "Can't add tokens from non-existent map.");
 
 		var key = ds_map_find_first(map);
 		while ( !is_undefined(key) )
@@ -248,25 +258,31 @@ function Parsley(write_name, write_func) constructor
 				// Flush buffer when finding the start of a list
 				if ( buffer != "" )
 				{
-					ds_list_add(list, [self.__write_func, buffer]);
+					var tmp = [self.__write_func, buffer];
+					try {
+						var t = self.user_postprocess_list(tmp, 0);
+						if ( !is_undefined(t) )
+							tmp = t;
+					} catch (e)
+					{
+						__psl_error(PARSLEY_ERROR.LIST_POSTPROCESSING_ERROR, "List postprocessing error: ", e);
+					}
+					ds_list_add(list, tmp);
 					buffer = "";
 				}
 				
 				var cmd = self.__read_expression(str, length, i, 0);
-				var finished_list = cmd.data;
 				i = cmd.end_index;
-				if ( PARSLEY_DEBUG_ERROR_CHECKING && array_length(cmd.data) == 0 )
-				{
-					__psl_error(7, "Empty top-level list is invalid.");
-				}
 
+				// List validation/postprocessing
+				var finished_list = cmd.data;
 				try {
 					var t = self.user_postprocess_list(cmd.data, 0);
 					if ( !is_undefined(t) )
 						finished_list = t;
 				} catch (e)
 				{
-					__psl_error(8, "Invalid list: ", e);
+					__psl_error(PARSLEY_ERROR.LIST_POSTPROCESSING_ERROR, "List postprocessing error: ", e);
 				}
 
 				ds_list_add(list, finished_list);
@@ -284,7 +300,16 @@ function Parsley(write_name, write_func) constructor
 		// Flush buffer when reaching the end of the string
 		if ( buffer != "" )
 		{
-			ds_list_add(list, [self.__write_func, buffer]);
+			var tmp = [self.__write_func, buffer];
+			try {
+				var t = self.user_postprocess_list(tmp, 0);
+				if ( !is_undefined(t) )
+					tmp = t;
+			} catch (e)
+			{
+				__psl_error(PARSLEY_ERROR.LIST_POSTPROCESSING_ERROR, "List postprocessing error: ", e);
+			}
+			ds_list_add(list, tmp);
 			buffer = "";
 		}
 		
