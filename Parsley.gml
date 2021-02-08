@@ -76,7 +76,7 @@ function Parsley(write_name, write_func) constructor
 	
 	user_evaluate_token = function(token) {};  // function user_evaluate_token(token) : any
 	user_override_token = function(token) {}; // function user_override_token(token) : any/undefined
-	user_parse_token = function(str, index, start_character) {}; // function user_parse_token(str, index, start_character) : { data: any, new_index: real }
+	user_parse_token = function(str, index, buffer) {}; // function user_parse_token(str, index, buffer) : { data: any, new_index: real }
 	/* INTERNAL FUNCTIONS */
 	__evaluate_token = function(token)
 	{
@@ -107,7 +107,7 @@ function Parsley(write_name, write_func) constructor
 					return t;
 			}
 		}
-		__psl_error(3, "Unhandled token '", token, "'.");
+		__psl_error(0, "Unhandled token '", token, "'.");
 	}
 	__read_expression = function(str, length, index, level)
 	{
@@ -137,7 +137,7 @@ function Parsley(write_name, write_func) constructor
 						finished_list = res;
 				} catch (e)
 				{
-					__psl_error(-1, "Invalid list: ", e);
+					__psl_error(1, "Invalid list: ", e);
 				}
 
 				// Have index end up on the character right after the closing bracket
@@ -145,7 +145,7 @@ function Parsley(write_name, write_func) constructor
 				
 				c = string_char_at(str, i);
 				if ( PARSLEY_DEBUG_ERROR_CHECKING && !(__psl_char_is_space(c) || (c == PARSLEY_CHAR_LIST_END)) )
-					__psl_error(4, "Expected whitespace or another '", PARSLEY_CHAR_LIST_BEGIN, "' after '", PARSLEY_CHAR_LIST_END, "', found '", c, "' instead.");
+					__psl_error(2, "Expected whitespace or another '", PARSLEY_CHAR_LIST_BEGIN, "' after '", PARSLEY_CHAR_LIST_END, "', found '", c, "' instead.");
 				
 				ds_list_add(list, finished_list);
 			} else if ( c == PARSLEY_CHAR_LIST_END) { // End list parsing, go up one level
@@ -184,26 +184,25 @@ function Parsley(write_name, write_func) constructor
 				// End parsing on space character
 				c = string_char_at(str, ++i);
 				if ( PARSLEY_DEBUG_ERROR_CHECKING && !( __psl_char_is_space(c) || (c == PARSLEY_CHAR_LIST_END) ))
-					__psl_error(5, "Expected whitespace or '", PARSLEY_CHAR_LIST_END, "' after end of string '", buffer, "', found '", c, "' instead.");
+					__psl_error(3, "Expected whitespace or '", PARSLEY_CHAR_LIST_END, "' after end of string '", buffer, "', found '", c, "' instead.");
 
 				// Add string to list and clear buffer
 				ds_list_add(list, buffer);
 				buffer = "";
 			} else {
-				var t = self.user_parse_token(str, i, c);
+				// Add character to buffer
+				buffer += c;
+				i++;
+				
+				var t = self.user_parse_token(str, i, buffer);
 				if ( !is_undefined(t) )
 				{
 					ds_list_add(list, t.data);
 					i = t.new_index;
-					continue;
 				}
-
-				// Add character to buffer
-				buffer += c;
-				i++;
 			}
 		}
-		__psl_error(6, "Could not find '", PARSLEY_CHAR_LIST_END , "' to end list at level ", level, ".");
+		__psl_error(4, "Could not find '", PARSLEY_CHAR_LIST_END , "' to end list at level ", level, ".");
 	}
 	
 	/* API */
@@ -213,7 +212,7 @@ function Parsley(write_name, write_func) constructor
 	add_token = function(name, value)
 	{
 		if ( PARSLEY_DEBUG_ERROR_CHECKING && ds_map_exists(self.tokens, name) )
-			__psl_error(7, "Can not replace token '", name, "'.");
+			__psl_error(5, "Can not replace token '", name, "'.");
 		self.tokens[? name] = value;
 	}
 	
@@ -222,7 +221,7 @@ function Parsley(write_name, write_func) constructor
 	add_tokens_from_map = function(map)
 	{
 		if ( PARSLEY_DEBUG_ERROR_CHECKING && !ds_exists(map, ds_type_map) )
-			__psl_error(8, "Can not add tokens from non-existent map.");
+			__psl_error(6, "Can not add tokens from non-existent map.");
 
 		var key = ds_map_find_first(map);
 		while ( !is_undefined(key) )
@@ -258,7 +257,7 @@ function Parsley(write_name, write_func) constructor
 				i = cmd.end_index;
 				if ( PARSLEY_DEBUG_ERROR_CHECKING && array_length(cmd.data) == 0 )
 				{
-					__psl_error(9, "Empty top-level list is invalid.");
+					__psl_error(7, "Empty top-level list is invalid.");
 				}
 
 				try {
@@ -267,7 +266,7 @@ function Parsley(write_name, write_func) constructor
 						finished_list = t;
 				} catch (e)
 				{
-					__psl_error(-1, "Invalid list: ", e);
+					__psl_error(8, "Invalid list: ", e);
 				}
 
 				ds_list_add(list, finished_list);
