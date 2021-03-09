@@ -30,7 +30,7 @@ In addition to these tokens and macros, you can define a subclass of the Parsay 
 
 1. Create a `Parsay`-derived object.
 2. Add your desired tokens.
-3. Call `object.parse_string(string)` or `object.parse_string_index(string, index)`, expecting an array of lists.
+3. Call `object.parse_string(string)` or `object.parse_string_index(string, index)`, expecting an array of arrays as return value.
 4. Call `object.free()` and destroy it using the `delete` operator
 5. Interpret the parsed array however you like
 
