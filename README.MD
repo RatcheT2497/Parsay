@@ -12,7 +12,7 @@ Regular text gets identified and replaced with a command specified during Parsay
 Supported argument data types are:
 
 - Decimal numbers (both positive, negative and with or without the decimal point).
-- Strings - starting and ending either with `'` or `` `
+- Strings - starting and ending either with `'` or `` ` ``
 - Lists - starting with `<` and ending with `>` - can be nested.
 
 The characters that define strings and lists are set in macros at the very top of the file. Specifically, `PARSAY_CHAR_STRING_1` and `PARSAY_CHAR_STRING_2` define strings, while `PARSAY_CHAR_LIST_BEGIN` and `PARSAY_CHAR_LIST_END` define lists.
