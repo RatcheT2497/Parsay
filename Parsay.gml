@@ -1,3 +1,4 @@
+// Special thanks to 'rhebok' on youtube for the new name :)
 #macro PARSAY_DEBUG_ERROR_CHECKING true
 #macro PARSAY_CHAR_LIST_BEGIN "<"
 #macro PARSAY_CHAR_LIST_END ">"
